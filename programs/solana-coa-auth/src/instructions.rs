@@ -1,9 +1,7 @@
 use crate::app_accounts::*;
 use crate::errors::CustomError;
-use crate::state::{CoaConfig, UserAccount};
 use crate::utils::is_wallet_authorized;
 use anchor_lang::prelude::*;
-use std::collections::HashMap;
 
 pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
     let coa_config = &mut ctx.accounts.coa_config;
@@ -20,38 +18,51 @@ pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
     coa_config.editors = Vec::new(); // Initialize empty editors list
     coa_config.owner = ctx.accounts.user.key();
     coa_config.next_user_id = 1; // Initialize the user ID counter starting from 1
-    coa_config.pubkey_to_user_id = HashMap::new(); // Initialize empty mapping
+    coa_config.total_users = 0;
+    coa_config.mapping_shards = 0;
+    coa_config.users_per_shard = 1000; // Default: 1000 users per shard
 
     Ok(())
 }
 
-pub fn onboard(ctx: Context<Onboard>) -> Result<()> {
+pub fn onboard(ctx: Context<Onboard>, shard_id: u8) -> Result<()> {
     let user_account = &mut ctx.accounts.user_account;
     let coa_config = &mut ctx.accounts.coa_config;
+    let mapping_shard = &mut ctx.accounts.mapping_shard;
     let user_pubkey = ctx.accounts.user.key();
 
     // Assign the current user ID and increment for next user
     user_account.coa_user_id = coa_config.next_user_id;
     let assigned_user_id = coa_config.next_user_id;
     coa_config.next_user_id += 1;
+    coa_config.total_users += 1;
+
+    // Determine which shard this user should use
+    let target_shard_id = coa_config.get_target_shard_for_new_user();
+
+    // If this is a new shard, initialize it
+    if mapping_shard.shard_id == 0 && mapping_shard.item_count == 0 {
+        mapping_shard.shard_id = target_shard_id;
+        coa_config.mapping_shards = coa_config.mapping_shards.max(target_shard_id + 1);
+    }
 
     // Set up user account with primary wallet
     user_account.primary_wallet = user_pubkey;
     user_account.authorized_wallets = vec![user_pubkey]; // Primary wallet is always authorized
     user_account.onboard_date = Clock::get()?.unix_timestamp;
+    user_account.mapping_shard_id = target_shard_id;
+    user_account.bump = ctx.bumps.user_account;
 
-    // Add mapping: pubKey -> userId (for all authorized wallets)
-    coa_config
-        .pubkey_to_user_id
-        .insert(user_pubkey, assigned_user_id);
+    // Add mapping: pubKey -> userId in the appropriate shard
+    mapping_shard.insert(user_pubkey, assigned_user_id)?;
 
     Ok(())
 }
 
 // Add an authorized wallet to a user account
-pub fn add_authorized_wallet(ctx: Context<AddAuthorizedWallet>) -> Result<()> {
+pub fn add_authorized_wallet(ctx: Context<AddAuthorizedWallet>, shard_id: u8) -> Result<()> {
     let user_account = &mut ctx.accounts.user_account;
-    let coa_config = &mut ctx.accounts.coa_config;
+    let mapping_shard = &mut ctx.accounts.mapping_shard;
     let authority = ctx.accounts.authority.key();
     let new_wallet = ctx.accounts.new_wallet.key();
 
@@ -70,40 +81,38 @@ pub fn add_authorized_wallet(ctx: Context<AddAuthorizedWallet>) -> Result<()> {
     // Add new wallet to authorized list
     user_account.authorized_wallets.push(new_wallet);
 
-    // Add mapping for the new wallet
-    coa_config
-        .pubkey_to_user_id
-        .insert(new_wallet, user_account.coa_user_id);
+    // Add mapping for the new wallet in the correct shard
+    mapping_shard.insert(new_wallet, user_account.coa_user_id)?;
 
     Ok(())
 }
 
-// Remove an authorized wallet (only primary wallet can do this)
-pub fn remove_authorized_wallet(ctx: Context<RemoveAuthorizedWallet>) -> Result<()> {
+// Remove an authorized wallet from a user account
+pub fn remove_authorized_wallet(ctx: Context<RemoveAuthorizedWallet>, shard_id: u8) -> Result<()> {
     let user_account = &mut ctx.accounts.user_account;
-    let coa_config = &mut ctx.accounts.coa_config;
+    let mapping_shard = &mut ctx.accounts.mapping_shard;
     let authority = ctx.accounts.authority.key();
     let wallet_to_remove = ctx.accounts.wallet_to_remove.key();
 
-    // Only primary wallet can remove authorized wallets
+    // Check if authority is authorized to remove wallets
     require!(
-        user_account.primary_wallet == authority,
+        is_wallet_authorized(user_account, &authority),
         CustomError::Unauthorized
     );
 
-    // Cannot remove primary wallet
-    require!(
-        wallet_to_remove != user_account.primary_wallet,
-        CustomError::Unauthorized
-    );
-
-    // Remove from authorized wallets
-    user_account
+    // Find and remove the wallet from authorized list
+    if let Some(pos) = user_account
         .authorized_wallets
-        .retain(|&wallet| wallet != wallet_to_remove);
+        .iter()
+        .position(|&x| x == wallet_to_remove)
+    {
+        user_account.authorized_wallets.remove(pos);
 
-    // Remove from mapping
-    coa_config.pubkey_to_user_id.remove(&wallet_to_remove);
+        // Remove mapping for the wallet from the correct shard
+        mapping_shard.remove(&wallet_to_remove)?;
+    } else {
+        return err!(CustomError::Unauthorized); // Wallet not found
+    }
 
     Ok(())
 }
@@ -127,9 +136,9 @@ pub fn update_user_data(ctx: Context<UpdateUserData>) -> Result<()> {
 }
 
 // Transfer primary wallet ownership (emergency recovery)
-pub fn transfer_primary_ownership(ctx: Context<TransferPrimaryOwnership>) -> Result<()> {
+pub fn transfer_primary_ownership(ctx: Context<TransferPrimaryOwnership>, shard_id: u8) -> Result<()> {
     let user_account = &mut ctx.accounts.user_account;
-    let coa_config = &mut ctx.accounts.coa_config;
+    let mapping_shard = &mut ctx.accounts.mapping_shard;
     let current_primary = ctx.accounts.current_primary.key();
     let new_primary = ctx.accounts.new_primary.key();
 
@@ -145,11 +154,9 @@ pub fn transfer_primary_ownership(ctx: Context<TransferPrimaryOwnership>) -> Res
         CustomError::Unauthorized
     );
 
-    // Update mappings: remove old primary, add new primary
-    coa_config.pubkey_to_user_id.remove(&current_primary);
-    coa_config
-        .pubkey_to_user_id
-        .insert(new_primary, user_account.coa_user_id);
+    // Update mappings: remove old primary, add new primary in the correct shard
+    mapping_shard.remove(&current_primary)?;
+    mapping_shard.insert(new_primary, user_account.coa_user_id)?;
 
     // Update primary wallet
     user_account.primary_wallet = new_primary;

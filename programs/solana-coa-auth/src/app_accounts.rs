@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = user, space = 8 + 90 + 8 + 8 + 4 + (32 + 8) * 100, seeds = [b"coa_config"], bump)]
+    #[account(init, payer = user, space = 8 + 8 + 8 + 1, seeds = [b"coa_config"], bump)]
     pub coa_config: Account<'info, CoaConfig>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -12,11 +12,14 @@ pub struct Initialize<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(shard_id: u8)]
 pub struct Onboard<'info> {
-    #[account(init, payer = user, space = 8 + 8 + 32 + 4 + 32 * 10 + 8, seeds = [b"user_account", user.key().as_ref()], bump)]
+    #[account(init, payer = user, space = 8 + 8 + 32 + 4 + 32 * 10 + 1, seeds = [b"user_account", user.key().as_ref()], bump)]
     pub user_account: Account<'info, UserAccount>,
     #[account(mut, seeds = [b"coa_config"], bump = coa_config.bump)]
     pub coa_config: Account<'info, CoaConfig>,
+    #[account(init, payer = user, space = 8 + 4 + (32 + 8) * SHARD_SIZE, seeds = [b"mapping_shard", &[shard_id]], bump)]
+    pub mapping_shard: Account<'info, PubkeyMappingShard>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -24,11 +27,12 @@ pub struct Onboard<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(shard_id: u8)]
 pub struct AddAuthorizedWallet<'info> {
     #[account(mut, seeds = [b"user_account", user_account.primary_wallet.as_ref()], bump)]
     pub user_account: Account<'info, UserAccount>,
-    #[account(mut, seeds = [b"coa_config"], bump = coa_config.bump)]
-    pub coa_config: Account<'info, CoaConfig>,
+    #[account(mut, seeds = [b"mapping_shard", &[shard_id]], bump)]
+    pub mapping_shard: Account<'info, PubkeyMappingShard>,
     #[account(mut)]
     pub authority: Signer<'info>, // Either primary_wallet or already authorized wallet
     /// CHECK: This is the new wallet address being added (doesn't need to sign)
@@ -44,11 +48,12 @@ pub struct UpdateUserData<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(shard_id: u8)]
 pub struct RemoveAuthorizedWallet<'info> {
     #[account(mut, seeds = [b"user_account", user_account.primary_wallet.as_ref()], bump)]
     pub user_account: Account<'info, UserAccount>,
-    #[account(mut, seeds = [b"coa_config"], bump = coa_config.bump)]
-    pub coa_config: Account<'info, CoaConfig>,
+    #[account(mut, seeds = [b"mapping_shard", &[shard_id]], bump)]
+    pub mapping_shard: Account<'info, PubkeyMappingShard>,
     #[account(mut)]
     pub authority: Signer<'info>, // Only primary_wallet can remove
     /// CHECK: This is the wallet address being removed
@@ -56,11 +61,12 @@ pub struct RemoveAuthorizedWallet<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(shard_id: u8)]
 pub struct TransferPrimaryOwnership<'info> {
     #[account(mut, seeds = [b"user_account", user_account.primary_wallet.as_ref()], bump)]
     pub user_account: Account<'info, UserAccount>,
-    #[account(mut, seeds = [b"coa_config"], bump = coa_config.bump)]
-    pub coa_config: Account<'info, CoaConfig>,
+    #[account(mut, seeds = [b"mapping_shard", &[shard_id]], bump)]
+    pub mapping_shard: Account<'info, PubkeyMappingShard>,
     #[account(mut)]
     pub current_primary: Signer<'info>, // Must be current primary wallet
     /// CHECK: This is the new primary wallet address

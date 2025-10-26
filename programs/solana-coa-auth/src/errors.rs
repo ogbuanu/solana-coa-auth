@@ -7,4 +7,7 @@ pub enum CustomError {
 
     #[msg("Invalid Account Owner")]
     InvalidAccountOwner,
+
+    #[msg("Mapping shard is full")]
+    ShardFull,
 }
