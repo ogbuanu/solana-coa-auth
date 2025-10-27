@@ -82,7 +82,10 @@ pub struct UserAccount {
 }
 
 impl UserAccount {
-    pub fn get_mapping_shard_seeds(&self) -> [&[u8]; 2] {
-        [b"mapping_shard", &[self.mapping_shard_id]]
+    pub fn get_mapping_shard_seeds(&self) -> Vec<Vec<u8>> {
+        vec![
+            b"mapping_shard".to_vec(),
+            self.mapping_shard_id.to_le_bytes().to_vec(),
+        ]
     }
 }

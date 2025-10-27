@@ -1,6 +1,8 @@
 use crate::state::*;
 use anchor_lang::prelude::*;
 
+const SHARD_SIZE: usize = 1000; // Same as PubkeyMappingShard::MAX_ITEMS
+
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(init, payer = user, space = 8 + 8 + 8 + 1, seeds = [b"coa_config"], bump)]
@@ -18,7 +20,7 @@ pub struct Onboard<'info> {
     pub user_account: Account<'info, UserAccount>,
     #[account(mut, seeds = [b"coa_config"], bump = coa_config.bump)]
     pub coa_config: Account<'info, CoaConfig>,
-    #[account(init, payer = user, space = 8 + 4 + (32 + 8) * SHARD_SIZE, seeds = [b"mapping_shard", &[shard_id]], bump)]
+    #[account(init, payer = user, space = 8 + 4 + (32 + 8) * SHARD_SIZE, seeds = [b"mapping_shard", shard_id.to_le_bytes().as_ref()], bump)]
     pub mapping_shard: Account<'info, PubkeyMappingShard>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -31,7 +33,7 @@ pub struct Onboard<'info> {
 pub struct AddAuthorizedWallet<'info> {
     #[account(mut, seeds = [b"user_account", user_account.primary_wallet.as_ref()], bump)]
     pub user_account: Account<'info, UserAccount>,
-    #[account(mut, seeds = [b"mapping_shard", &[shard_id]], bump)]
+    #[account(mut, seeds = [b"mapping_shard", shard_id.to_le_bytes().as_ref()], bump)]
     pub mapping_shard: Account<'info, PubkeyMappingShard>,
     #[account(mut)]
     pub authority: Signer<'info>, // Either primary_wallet or already authorized wallet
@@ -52,7 +54,7 @@ pub struct UpdateUserData<'info> {
 pub struct RemoveAuthorizedWallet<'info> {
     #[account(mut, seeds = [b"user_account", user_account.primary_wallet.as_ref()], bump)]
     pub user_account: Account<'info, UserAccount>,
-    #[account(mut, seeds = [b"mapping_shard", &[shard_id]], bump)]
+    #[account(mut, seeds = [b"mapping_shard", shard_id.to_le_bytes().as_ref()], bump)]
     pub mapping_shard: Account<'info, PubkeyMappingShard>,
     #[account(mut)]
     pub authority: Signer<'info>, // Only primary_wallet can remove
@@ -65,7 +67,7 @@ pub struct RemoveAuthorizedWallet<'info> {
 pub struct TransferPrimaryOwnership<'info> {
     #[account(mut, seeds = [b"user_account", user_account.primary_wallet.as_ref()], bump)]
     pub user_account: Account<'info, UserAccount>,
-    #[account(mut, seeds = [b"mapping_shard", &[shard_id]], bump)]
+    #[account(mut, seeds = [b"mapping_shard", shard_id.to_le_bytes().as_ref()], bump)]
     pub mapping_shard: Account<'info, PubkeyMappingShard>,
     #[account(mut)]
     pub current_primary: Signer<'info>, // Must be current primary wallet

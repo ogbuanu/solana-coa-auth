@@ -51,7 +51,6 @@ pub fn onboard(ctx: Context<Onboard>, shard_id: u8) -> Result<()> {
     user_account.authorized_wallets = vec![user_pubkey]; // Primary wallet is always authorized
     user_account.onboard_date = Clock::get()?.unix_timestamp;
     user_account.mapping_shard_id = target_shard_id;
-    user_account.bump = ctx.bumps.user_account;
 
     // Add mapping: pubKey -> userId in the appropriate shard
     mapping_shard.insert(user_pubkey, assigned_user_id)?;
@@ -136,7 +135,10 @@ pub fn update_user_data(ctx: Context<UpdateUserData>) -> Result<()> {
 }
 
 // Transfer primary wallet ownership (emergency recovery)
-pub fn transfer_primary_ownership(ctx: Context<TransferPrimaryOwnership>, shard_id: u8) -> Result<()> {
+pub fn transfer_primary_ownership(
+    ctx: Context<TransferPrimaryOwnership>,
+    shard_id: u8,
+) -> Result<()> {
     let user_account = &mut ctx.accounts.user_account;
     let mapping_shard = &mut ctx.accounts.mapping_shard;
     let current_primary = ctx.accounts.current_primary.key();
