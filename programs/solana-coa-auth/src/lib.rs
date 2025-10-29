@@ -31,10 +31,6 @@ pub mod solana_coa_auth {
         instructions::remove_authorized_wallet(ctx, shard_id)
     }
 
-    pub fn update_user_data(ctx: Context<UpdateUserData>) -> Result<()> {
-        instructions::update_user_data(ctx)
-    }
-
     pub fn transfer_primary_ownership(
         ctx: Context<TransferPrimaryOwnership>,
         shard_id: u8,

@@ -25,7 +25,7 @@ pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
     Ok(())
 }
 
-pub fn onboard(ctx: Context<Onboard>, shard_id: u8) -> Result<()> {
+pub fn onboard(ctx: Context<Onboard>, _shard_id: u8) -> Result<()> {
     let user_account = &mut ctx.accounts.user_account;
     let coa_config = &mut ctx.accounts.coa_config;
     let mapping_shard = &mut ctx.accounts.mapping_shard;
@@ -59,7 +59,7 @@ pub fn onboard(ctx: Context<Onboard>, shard_id: u8) -> Result<()> {
 }
 
 // Add an authorized wallet to a user account
-pub fn add_authorized_wallet(ctx: Context<AddAuthorizedWallet>, shard_id: u8) -> Result<()> {
+pub fn add_authorized_wallet(ctx: Context<AddAuthorizedWallet>, _shard_id: u8) -> Result<()> {
     let user_account = &mut ctx.accounts.user_account;
     let mapping_shard = &mut ctx.accounts.mapping_shard;
     let authority = ctx.accounts.authority.key();
@@ -87,7 +87,7 @@ pub fn add_authorized_wallet(ctx: Context<AddAuthorizedWallet>, shard_id: u8) ->
 }
 
 // Remove an authorized wallet from a user account
-pub fn remove_authorized_wallet(ctx: Context<RemoveAuthorizedWallet>, shard_id: u8) -> Result<()> {
+pub fn remove_authorized_wallet(ctx: Context<RemoveAuthorizedWallet>, _shard_id: u8) -> Result<()> {
     let user_account = &mut ctx.accounts.user_account;
     let mapping_shard = &mut ctx.accounts.mapping_shard;
     let authority = ctx.accounts.authority.key();
@@ -116,28 +116,10 @@ pub fn remove_authorized_wallet(ctx: Context<RemoveAuthorizedWallet>, shard_id: 
     Ok(())
 }
 
-// Update user data (can be called by any authorized wallet)
-pub fn update_user_data(ctx: Context<UpdateUserData>) -> Result<()> {
-    let user_account = &mut ctx.accounts.user_account;
-    let authority = ctx.accounts.authority.key();
-
-    // Check if authority is authorized
-    require!(
-        is_wallet_authorized(user_account, &authority),
-        CustomError::Unauthorized
-    );
-
-    // Here you can add logic to update user data
-    // For example, update timestamp or other fields
-    // user_account.some_field = new_value;
-
-    Ok(())
-}
-
 // Transfer primary wallet ownership (emergency recovery)
 pub fn transfer_primary_ownership(
     ctx: Context<TransferPrimaryOwnership>,
-    shard_id: u8,
+    _shard_id: u8,
 ) -> Result<()> {
     let user_account = &mut ctx.accounts.user_account;
     let mapping_shard = &mut ctx.accounts.mapping_shard;

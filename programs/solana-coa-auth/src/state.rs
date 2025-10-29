@@ -14,8 +14,8 @@ pub struct CoaConfig {
 
 impl CoaConfig {
     pub fn get_target_shard_for_new_user(&self) -> u8 {
-        // Simple distribution: round-robin across shards
-        (self.total_users / self.users_per_shard as u64) as u8
+        // Simple distribution: round-robin across shards, starting from 1
+        (self.total_users / self.users_per_shard as u64) as u8 + 1
     }
 
     pub fn should_create_new_shard(&self) -> bool {
