@@ -16,25 +16,19 @@ pub mod solana_coa_auth {
         instructions::initialize(ctx)
     }
 
-    pub fn onboard(ctx: Context<Onboard>, shard_id: u8) -> Result<()> {
-        instructions::onboard(ctx, shard_id)
+    pub fn onboard(ctx: Context<Onboard>) -> Result<()> {
+        instructions::onboard(ctx)
     }
 
-    pub fn add_authorized_wallet(ctx: Context<AddAuthorizedWallet>, shard_id: u8) -> Result<()> {
-        instructions::add_authorized_wallet(ctx, shard_id)
+    pub fn add_authorized_wallet(ctx: Context<AddAuthorizedWallet>) -> Result<()> {
+        instructions::add_authorized_wallet(ctx)
     }
 
-    pub fn remove_authorized_wallet(
-        ctx: Context<RemoveAuthorizedWallet>,
-        shard_id: u8,
-    ) -> Result<()> {
-        instructions::remove_authorized_wallet(ctx, shard_id)
+    pub fn remove_authorized_wallet(ctx: Context<RemoveAuthorizedWallet>) -> Result<()> {
+        instructions::remove_authorized_wallet(ctx)
     }
 
-    pub fn transfer_primary_ownership(
-        ctx: Context<TransferPrimaryOwnership>,
-        shard_id: u8,
-    ) -> Result<()> {
-        instructions::transfer_primary_ownership(ctx, shard_id)
+    pub fn transfer_primary_ownership(ctx: Context<TransferPrimaryOwnership>) -> Result<()> {
+        instructions::transfer_primary_ownership(ctx)
     }
 }
