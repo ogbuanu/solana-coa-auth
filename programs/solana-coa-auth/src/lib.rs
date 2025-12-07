@@ -31,4 +31,12 @@ pub mod solana_coa_auth {
     pub fn transfer_primary_ownership(ctx: Context<TransferPrimaryOwnership>) -> Result<()> {
         instructions::transfer_primary_ownership(ctx)
     }
+
+    pub fn set_new_primary_ownership(ctx: Context<SetNewPrimaryOwnership>) -> Result<()> {
+        instructions::set_new_primary_ownership(ctx)
+    }
+
+    pub fn leave_coa_account(ctx: Context<LeaveCoaAccount>) -> Result<()> {
+        instructions::leave_coa_account(ctx)
+    }
 }
