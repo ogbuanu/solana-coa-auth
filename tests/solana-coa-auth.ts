@@ -190,4 +190,153 @@ describe("solana-coa-auth", () => {
         .rpc()
     ).to.be.rejected;
   });
+
+  it("fuzz: randomized sequences preserve invariants", async () => {
+    const ROUNDS = 100; // increase gradually
+    const rng = (
+      (seed) => () =>
+        (seed = (seed * 1664525 + 1013904223) >>> 0)
+    )(12345);
+    const pick = (n: number) => rng() % n;
+
+    // Start with primary (provider)
+    const primaryUa = deriveUserAccountPda(provider.wallet.publicKey);
+    // Ensure onboarded
+    await program.methods
+      .onboard()
+      .accounts({
+        userAccount: primaryUa,
+        coaConfig: coaConfigPda,
+        user: provider.wallet.publicKey,
+        systemProgram: web3.SystemProgram.programId,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .rpc();
+
+    // Keep a small pool of wallets
+    const pool: { kp: web3.Keypair; pda: web3.PublicKey }[] = [];
+    const mkWallet = async () => {
+      const kp = web3.Keypair.generate();
+      const sig = await provider.connection.requestAirdrop(kp.publicKey, 1e9);
+      await provider.connection.confirmTransaction(sig, "confirmed");
+      const pda = deriveUserAccountPda(kp.publicKey);
+      return { kp, pda };
+    };
+
+    // Create 3 wallets
+    for (let i = 0; i < 3; i++) pool.push(await mkWallet());
+
+    for (let r = 0; r < ROUNDS; r++) {
+      const action = pick(6);
+      try {
+        switch (action) {
+          case 0: {
+            // onboard random wallet
+            const w = pool[pick(pool.length)];
+            await program.methods
+              .onboard()
+              .accounts({
+                userAccount: w.pda,
+                coaConfig: coaConfigPda,
+                user: w.kp.publicKey,
+                systemProgram: web3.SystemProgram.programId,
+                rent: web3.SYSVAR_RENT_PUBKEY,
+              })
+              .signers([w.kp])
+              .rpc();
+            break;
+          }
+          case 1: {
+            // addAuthorized: primary adds one wallet
+            const w = pool[pick(pool.length)];
+            await program.methods
+              .addAuthorizedWallet()
+              .accounts({
+                coaConfig: coaConfigPda,
+                userAccount: primaryUa,
+                newUserAccount: w.pda,
+                authority: provider.wallet.publicKey,
+              })
+              .rpc();
+            break;
+          }
+          case 2: {
+            // removeAuthorized: try remove random wallet (could be rejected per guards)
+            const w = pool[pick(pool.length)];
+            await program.methods
+              .removeAuthorizedWallet()
+              .accounts({
+                userAccount: primaryUa,
+                userAccountToRemove: w.pda,
+                authority: provider.wallet.publicKey,
+              })
+              .rpc();
+            break;
+          }
+          case 3: {
+            // transferPrimary: try set an onboarded wallet as new primary
+            const w = pool[pick(pool.length)];
+            await program.methods
+              .transferPrimaryOwnership()
+              .accounts({
+                userAccount: primaryUa,
+                newPrimaryAccount: w.pda,
+                authority: provider.wallet.publicKey,
+              })
+              .rpc();
+            break;
+          }
+          case 4: {
+            // setNewPrimaryOwnership: normal route
+            const w = pool[pick(pool.length)];
+            await program.methods
+              .setNewPrimaryOwnership()
+              .accounts({
+                userAccount: primaryUa,
+                newPrimaryAccount: w.pda,
+                authority: provider.wallet.publicKey,
+              })
+              .rpc();
+            break;
+          }
+          case 5: {
+            // leave: pick random wallet and ask it to leave its own account
+            const w = pool[pick(pool.length)];
+            await program.methods
+              .leaveCoaAccount()
+              .accounts({
+                userAccount: w.pda,
+                authority: w.kp.publicKey,
+              })
+              .signers([w.kp])
+              .rpc();
+            break;
+          }
+        }
+      } catch (e) {
+        // Expected failures are fine. Assert invariants still hold.
+        // Fetch and check core invariants.
+        const ua = await program.account.userAccount
+          .fetch(primaryUa)
+          .catch(() => null);
+        if (ua) {
+          // Invariant examples:
+          // - primaryUa.isPrimary implies it should not have left
+          // - if ua.coaUserId == 0 then it cannot be primary
+          const isPrimary = ua.isPrimary;
+          const id =
+            ua.coaUserId instanceof BN
+              ? ua.coaUserId.toNumber()
+              : Number(ua.coaUserId);
+          if (id === 0) expect(isPrimary).to.equal(false);
+        }
+        // Log minimal info for shrinking
+        // console.log("Round", r, "action", action, "error", String(e));
+      }
+    }
+
+    // Final invariant check
+    const cfg = await program.account.coaConfig.fetch(coaConfigPda);
+    expect(new BN(cfg.nextUserId).toNumber()).to.be.greaterThan(0);
+  });
 });
