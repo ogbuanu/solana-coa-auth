@@ -6,7 +6,7 @@ pub mod utils;
 use crate::app_accounts::*;
 use anchor_lang::prelude::*;
 
-declare_id!("Cp8XfGnqy4FkGFKcxgyqyrxBd9iDZEPhfLQyJwypE62i");
+declare_id!("8bZzdGzJs5CYf8o1uo7PKGVMWbPCyYu9Rb9W1DmnUFz9");
 
 #[program]
 pub mod solana_coa_auth {

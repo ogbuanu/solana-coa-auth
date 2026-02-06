@@ -9,14 +9,8 @@ use anchor_lang::prelude::*;
 pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
     let coa_config = &mut ctx.accounts.coa_config;
 
-    // Verify the PDA and bump value
-    let (expected_coa_config_pda, bump) =
-        Pubkey::find_program_address(&[b"coa_config"], ctx.program_id);
-    if coa_config.key() != expected_coa_config_pda {
-        return Err(ProgramError::InvalidSeeds.into());
-    }
-
-    coa_config.bump = bump;
+    // Anchor enforces seeds/bump; record bump from context
+    coa_config.bump = ctx.bumps.coa_config;
     coa_config.signers = Vec::new(); // Initialize empty signers list
     coa_config.editors = Vec::new(); // Initialize empty editors list
     coa_config.owner = ctx.accounts.user.key();
@@ -42,6 +36,7 @@ pub fn onboard(ctx: Context<Onboard>) -> Result<()> {
     user_account.wallet_address = user_pubkey;
     user_account.is_primary = true;
     user_account.onboard_date = Clock::get()?.unix_timestamp;
+    user_account.bump = ctx.bumps.user_account;
 
     emit!(Onboarded {
         user: user_pubkey,

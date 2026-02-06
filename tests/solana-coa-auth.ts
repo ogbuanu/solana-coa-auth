@@ -1,7 +1,12 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, web3, BN } from "@coral-xyz/anchor";
 import { expect } from "chai";
+import chaiAsPromised from "chai-as-promised";
 import { SolanaCoaAuth } from "../target/types/solana_coa_auth";
+import idl from "../target/idl/solana_coa_auth.json";
+
+import chai from "chai";
+chai.use(chaiAsPromised);
 
 describe("solana-coa-auth", () => {
   const provider = AnchorProvider.env();
@@ -10,30 +15,30 @@ describe("solana-coa-auth", () => {
 
   const [coaConfigPda] = web3.PublicKey.findProgramAddressSync(
     [Buffer.from("coa_config")],
-    program.programId
+    program.programId,
   );
 
   const deriveUserAccountPda = (wallet: web3.PublicKey) =>
     web3.PublicKey.findProgramAddressSync(
       [Buffer.from("user_account"), wallet.toBuffer()],
-      program.programId
+      program.programId,
     )[0];
 
   it("initialize creates CoaConfig PDA", async () => {
     await program.methods
       .initialize()
-      .accounts({
-        coaConfig: coaConfigPda,
-        user: provider.wallet.publicKey,
-        systemProgram: web3.SystemProgram.programId,
-        rent: web3.SYSVAR_RENT_PUBKEY,
-      })
+      .accounts([
+        coaConfigPda,
+        provider.wallet.publicKey,
+        web3.SystemProgram.programId,
+        web3.SYSVAR_RENT_PUBKEY,
+      ])
       .rpc();
 
     const accountInfo = await provider.connection.getAccountInfo(coaConfigPda);
     expect(accountInfo).to.not.be.null;
     expect(accountInfo!.owner.toBase58()).to.equal(
-      program.programId.toBase58()
+      program.programId.toBase58(),
     );
 
     const cfg = await program.account.coaConfig.fetch(coaConfigPda);
@@ -46,13 +51,13 @@ describe("solana-coa-auth", () => {
 
     await program.methods
       .onboard()
-      .accounts({
-        userAccount: userAccountPda,
-        coaConfig: coaConfigPda,
-        user: provider.wallet.publicKey,
-        systemProgram: web3.SystemProgram.programId,
-        rent: web3.SYSVAR_RENT_PUBKEY,
-      })
+      .accounts([
+        userAccountPda,
+        coaConfigPda,
+        provider.wallet.publicKey,
+        web3.SystemProgram.programId,
+        web3.SYSVAR_RENT_PUBKEY,
+      ])
       .rpc();
 
     const ua = await program.account.userAccount.fetch(userAccountPda);
@@ -62,7 +67,7 @@ describe("solana-coa-auth", () => {
         : Number(ua.coaUserId);
     expect(id).to.be.greaterThan(0);
     expect(ua.walletAddress.toBase58()).to.equal(
-      provider.wallet.publicKey.toBase58()
+      provider.wallet.publicKey.toBase58(),
     );
     expect(ua.isPrimary).to.equal(true);
 
@@ -81,18 +86,38 @@ describe("solana-coa-auth", () => {
     // Initialize its UserAccount PDA via onboard, but we need it to be added by first account later.
     // Instead, we just create PDA on-chain by calling onboard from second wallet.
     const secondUserAccountPda = deriveUserAccountPda(second.publicKey);
+    const secondProvider = new anchor.AnchorProvider(
+      provider.connection,
+      new anchor.Wallet(second),
+      provider.opts,
+    );
 
-    await program.methods
+    const secondProgram = new Program(
+      idl,
+      secondProvider,
+      // program.programId,
+    );
+    await secondProgram.methods
       .onboard()
-      .accounts({
-        userAccount: secondUserAccountPda,
-        coaConfig: coaConfigPda,
-        user: second.publicKey,
-        systemProgram: web3.SystemProgram.programId,
-        rent: web3.SYSVAR_RENT_PUBKEY,
-      })
-      .signers([second])
+      .accounts([
+        secondUserAccountPda,
+        coaConfigPda,
+        second.publicKey,
+        web3.SystemProgram.programId,
+        web3.SYSVAR_RENT_PUBKEY,
+      ] as any)
       .rpc();
+    // await program.methods
+    //   .onboard()
+    //   .accounts([
+    //     secondUserAccountPda,
+    //     coaConfigPda,
+    //     second.publicKey,
+    //     web3.SystemProgram.programId,
+    //     web3.SYSVAR_RENT_PUBKEY,
+    //   ])
+    //   .signers([second])
+    //   .rpc();
 
     const ua2 = await program.account.userAccount.fetch(secondUserAccountPda);
     const id2 =
@@ -120,13 +145,13 @@ describe("solana-coa-auth", () => {
     await expect(
       program.methods
         .addAuthorizedWallet()
-        .accounts({
-          coaConfig: coaConfigPda,
-          userAccount: firstUaPda,
-          newUserAccount: secondUaPda,
-          authority: provider.wallet.publicKey,
-        })
-        .rpc()
+        .accounts([
+          coaConfigPda,
+          firstUaPda,
+          secondUaPda,
+          provider.wallet.publicKey,
+        ])
+        .rpc(),
     ).to.be.rejected;
   });
 
@@ -136,12 +161,8 @@ describe("solana-coa-auth", () => {
     await expect(
       program.methods
         .removeAuthorizedWallet()
-        .accounts({
-          userAccount: firstUaPda,
-          userAccountToRemove: firstUaPda,
-          authority: provider.wallet.publicKey,
-        })
-        .rpc()
+        .accounts([firstUaPda, firstUaPda, provider.wallet.publicKey])
+        .rpc(),
     ).to.be.rejected;
   });
 
@@ -152,12 +173,8 @@ describe("solana-coa-auth", () => {
     await expect(
       program.methods
         .transferPrimaryOwnership()
-        .accounts({
-          userAccount: firstUaPda,
-          newPrimaryAccount: secondUaPda,
-          authority: provider.wallet.publicKey,
-        })
-        .rpc()
+        .accounts([firstUaPda, secondUaPda, provider.wallet.publicKey])
+        .rpc(),
     ).to.be.rejected;
   });
 
@@ -168,12 +185,8 @@ describe("solana-coa-auth", () => {
     await expect(
       program.methods
         .setNewPrimaryOwnership()
-        .accounts({
-          userAccount: firstUaPda,
-          newPrimaryAccount: secondUaPda,
-          authority: provider.wallet.publicKey,
-        })
-        .rpc()
+        .accounts([firstUaPda, secondUaPda, provider.wallet.publicKey])
+        .rpc(),
     ).to.be.rejected;
   });
 
@@ -183,11 +196,8 @@ describe("solana-coa-auth", () => {
     await expect(
       program.methods
         .leaveCoaAccount()
-        .accounts({
-          userAccount: firstUaPda,
-          authority: provider.wallet.publicKey,
-        })
-        .rpc()
+        .accounts([firstUaPda, provider.wallet.publicKey])
+        .rpc(),
     ).to.be.rejected;
   });
 
@@ -200,17 +210,37 @@ describe("solana-coa-auth", () => {
     const pick = (n: number) => rng() % n;
 
     // Start with primary (provider)
-    const primaryUa = deriveUserAccountPda(provider.wallet.publicKey);
+    const primary = web3.Keypair.generate();
+    // Airdrop some SOL for fees
+    const sig = await provider.connection.requestAirdrop(
+      primary.publicKey,
+      1e9,
+    );
+    await provider.connection.confirmTransaction(sig, "confirmed");
+
+    const primaryUa = deriveUserAccountPda(primary.publicKey);
+
+    const secondProvider = new anchor.AnchorProvider(
+      provider.connection,
+      new anchor.Wallet(primary),
+      provider.opts,
+    );
+
+    const secondProgram = new Program(
+      idl,
+      secondProvider,
+      // program.programId,
+    );
     // Ensure onboarded
-    await program.methods
+    await secondProgram.methods
       .onboard()
-      .accounts({
-        userAccount: primaryUa,
-        coaConfig: coaConfigPda,
-        user: provider.wallet.publicKey,
-        systemProgram: web3.SystemProgram.programId,
-        rent: web3.SYSVAR_RENT_PUBKEY,
-      })
+      .accounts([
+        primaryUa,
+        coaConfigPda,
+        provider.wallet.publicKey,
+        web3.SystemProgram.programId,
+        web3.SYSVAR_RENT_PUBKEY,
+      ] as any)
       .rpc();
 
     // Keep a small pool of wallets
@@ -233,17 +263,19 @@ describe("solana-coa-auth", () => {
           case 0: {
             // onboard random wallet
             const w = pool[pick(pool.length)];
-            await program.methods
-              .onboard()
-              .accounts({
-                userAccount: w.pda,
-                coaConfig: coaConfigPda,
-                user: w.kp.publicKey,
-                systemProgram: web3.SystemProgram.programId,
-                rent: web3.SYSVAR_RENT_PUBKEY,
-              })
-              .signers([w.kp])
-              .rpc();
+
+            // await program.methods
+            //   .onboard()
+            //   .accounts([
+            //     w.pda,
+            //     coaConfigPda,
+            //     w.kp.publicKey,
+            //     web3.SystemProgram.programId,
+            //     web3.SYSVAR_RENT_PUBKEY,
+            //   ])
+            //   .signers([w.kp])
+            //   .rpc();
+            console.log("Onboard", w.kp.publicKey.toBase58());
             break;
           }
           case 1: {
@@ -251,12 +283,12 @@ describe("solana-coa-auth", () => {
             const w = pool[pick(pool.length)];
             await program.methods
               .addAuthorizedWallet()
-              .accounts({
-                coaConfig: coaConfigPda,
-                userAccount: primaryUa,
-                newUserAccount: w.pda,
-                authority: provider.wallet.publicKey,
-              })
+              .accounts([
+                coaConfigPda,
+                primaryUa,
+                w.pda,
+                provider.wallet.publicKey,
+              ])
               .rpc();
             break;
           }
@@ -265,11 +297,7 @@ describe("solana-coa-auth", () => {
             const w = pool[pick(pool.length)];
             await program.methods
               .removeAuthorizedWallet()
-              .accounts({
-                userAccount: primaryUa,
-                userAccountToRemove: w.pda,
-                authority: provider.wallet.publicKey,
-              })
+              .accounts([primaryUa, w.pda, provider.wallet.publicKey])
               .rpc();
             break;
           }
@@ -278,11 +306,7 @@ describe("solana-coa-auth", () => {
             const w = pool[pick(pool.length)];
             await program.methods
               .transferPrimaryOwnership()
-              .accounts({
-                userAccount: primaryUa,
-                newPrimaryAccount: w.pda,
-                authority: provider.wallet.publicKey,
-              })
+              .accounts([primaryUa, w.pda, provider.wallet.publicKey])
               .rpc();
             break;
           }
@@ -291,11 +315,7 @@ describe("solana-coa-auth", () => {
             const w = pool[pick(pool.length)];
             await program.methods
               .setNewPrimaryOwnership()
-              .accounts({
-                userAccount: primaryUa,
-                newPrimaryAccount: w.pda,
-                authority: provider.wallet.publicKey,
-              })
+              .accounts([primaryUa, w.pda, provider.wallet.publicKey])
               .rpc();
             break;
           }
@@ -304,10 +324,7 @@ describe("solana-coa-auth", () => {
             const w = pool[pick(pool.length)];
             await program.methods
               .leaveCoaAccount()
-              .accounts({
-                userAccount: w.pda,
-                authority: w.kp.publicKey,
-              })
+              .accounts([w.pda, w.kp.publicKey])
               .signers([w.kp])
               .rpc();
             break;

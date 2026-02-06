@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = user, space = 8 + 8 + 8 + 1, seeds = [b"coa_config"], bump)]
+    #[account(init, payer = user, space = 8 + 1 + 4 + 4 + 32+ 8+ 8, seeds = [b"coa_config"], bump)]
     pub coa_config: Account<'info, CoaConfig>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -12,9 +12,8 @@ pub struct Initialize<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(_shard_id: u8)]
 pub struct Onboard<'info> {
-    #[account(init, payer = user, space = 8 + 8 + 32 + 4 + 32 * 10 + 1, seeds = [b"user_account", user.key().as_ref()], bump)]
+    #[account(init, payer = user, space = 8 + 8 + 32 + 1 + 8 + 1, seeds = [b"user_account", user.key().as_ref()], bump)]
     pub user_account: Account<'info, UserAccount>,
     #[account(mut, seeds = [b"coa_config"], bump = coa_config.bump)]
     pub coa_config: Account<'info, CoaConfig>,

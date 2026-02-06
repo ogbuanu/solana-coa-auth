@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-solana_coa_auth = "H2AqVC1AtiRnLvnYKaK5AJ2UD9mqFBnxbXYoABCZ9hhr"
+solana_coa_auth = "8bZzdGzJs5CYf8o1uo7PKGVMWbPCyYu9Rb9W1DmnUFz9"
 
 [registry]
 url = "https://api.apr.dev"
